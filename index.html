@@ -77,6 +77,7 @@
       const [rosterData, setRosterData] = useState(null);
       const [assignments, setAssignments] = useState(null);
       const [stats, setStats] = useState(null);
+      const [unassignedEmails, setUnassignedEmails] = useState([]);
       const [numCommittees, setNumCommittees] = useState(7);
       const [isProcessing, setIsProcessing] = useState(false);
 
@@ -86,7 +87,7 @@
         const data = lines.slice(1).map(line => {
           const values = line.split(',').map(v => v.trim());
           return {
-            email: values[1],
+            email: values[1] ? values[1].toLowerCase().trim() : '',
             first: values[2],
             second: values[3],
             third: values[4]
@@ -102,7 +103,7 @@
         const data = lines.slice(1).map(line => {
           const values = line.split(',').map(v => v.trim());
           return {
-            email: values[0],
+            email: values[0] ? values[0].toLowerCase().trim() : '',
             isLeader: values[1] && values[1].toLowerCase() === 'yes'
           };
         }).filter(row => row.email);
@@ -121,6 +122,7 @@
           setPreferencesData(parsed);
           setAssignments(null);
           setStats(null);
+          setUnassignedEmails([]);
         };
         reader.readAsText(file);
       };
@@ -136,6 +138,7 @@
           setRosterData(parsed);
           setAssignments(null);
           setStats(null);
+          setUnassignedEmails([]);
         };
         reader.readAsText(file);
       };
@@ -146,6 +149,10 @@
         setIsProcessing(true);
         
         setTimeout(() => {
+          console.log('=== DEBUG INFO ===');
+          console.log('Total roster:', rosterData.length);
+          console.log('Total preferences:', preferencesData.length);
+          
           const committeesSet = new Set();
           preferencesData.forEach(person => {
             if (person.first) committeesSet.add(person.first);
@@ -164,6 +171,12 @@
           const leadersWithoutPrefs = leaders.filter(l => !preferencesEmails.has(l.email));
           const nonLeadersWithPrefs = nonLeaders.filter(nl => preferencesEmails.has(nl.email));
           const nonLeadersWithoutPrefs = nonLeaders.filter(nl => !preferencesEmails.has(nl.email));
+
+          console.log('Leaders with prefs:', leadersWithPrefs.length);
+          console.log('Leaders without prefs:', leadersWithoutPrefs.length);
+          console.log('Non-leaders with prefs:', nonLeadersWithPrefs.length);
+          console.log('Non-leaders without prefs:', nonLeadersWithoutPrefs.length);
+          console.log('Expected total:', leadersWithPrefs.length + leadersWithoutPrefs.length + nonLeadersWithPrefs.length + nonLeadersWithoutPrefs.length);
 
           const preferencesMap = {};
           preferencesData.forEach(p => {
@@ -309,6 +322,24 @@
           const none = result.filter(r => r.preference === 4).length;
           const noForm = result.filter(r => r.preference === 5).length;
 
+          console.log('=== ASSIGNMENT RESULTS ===');
+          console.log('Total assigned:', result.length);
+          console.log('First choice:', first);
+          console.log('Second choice:', second);
+          console.log('Third choice:', third);
+          console.log('None of top 3:', none);
+          console.log('No form filled:', noForm);
+          
+          // Find unassigned people
+          const assignedEmails = new Set(result.map(r => r.email));
+          const unassigned = rosterData.filter(p => !assignedEmails.has(p.email));
+          if (unassigned.length > 0) {
+            console.log('=== UNASSIGNED PEOPLE ===');
+            console.log('Count:', unassigned.length);
+            console.log('Emails:', unassigned.map(p => p.email));
+          }
+          console.log('======================');
+
           const statistics = {
             first: ((first / result.length) * 100).toFixed(1),
             second: ((second / result.length) * 100).toFixed(1),
@@ -323,9 +354,11 @@
             })).sort((a, b) => b.size - a.size),
             totalFilled: preferencesData.length,
             totalRoster: rosterData.length,
-            notFilled: rosterData.length - preferencesData.length
+            totalAssigned: result.length,
+            notFilled: noForm
           };
 
+          setUnassignedEmails(unassigned.map(p => p.email));
           setAssignments(result);
           setStats(statistics);
           setIsProcessing(false);
@@ -580,6 +613,28 @@
                     </div>
                   </div>
 
+                  {stats.totalAssigned !== stats.totalRoster && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-red-700 mb-2">
+                        <AlertCircle size={20} />
+                        <span className="font-medium">
+                          Warning: Assigned {stats.totalAssigned} people but roster has {stats.totalRoster}. 
+                        </span>
+                      </div>
+                      {unassignedEmails.length > 0 && (
+                        <div className="mt-3 text-sm text-red-600">
+                          <p className="font-medium mb-1">Unassigned emails ({unassignedEmails.length}):</p>
+                          <div className="max-h-40 overflow-y-auto bg-white p-2 rounded border border-red-200">
+                            {unassignedEmails.map((email, idx) => (
+                              <div key={idx} className="text-xs font-mono py-0.5">{email}</div>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-xs">These emails are in your roster but not in preferences. Check for typos or case differences.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
                     <div className="stat-card bg-white p-4 rounded-xl border-2 border-green-200 stagger-1 fade-in-up">
                       <div className="text-2xl font-bold text-green-700 mb-1">{stats.first}%</div>
@@ -644,6 +699,7 @@
                     setRosterData(null);
                     setAssignments(null);
                     setStats(null);
+                    setUnassignedEmails([]);
                   }}
                   className="w-full bg-white text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-all border border-gray-300"
                 >
@@ -653,7 +709,7 @@
             )}
 
             <div className="mt-12 text-center text-sm text-gray-500">
-              <p>Built for Johnston Student Council • Harrison Burkhardt 2025-2026</p>
+              <p>Built for Johnston Student Council • Optimized for future councils</p>
             </div>
           </div>
         </div>
