@@ -210,7 +210,61 @@
             });
           }
 
+          // Assign remaining leaders who have preferences but weren't assigned yet
           const assignedLeaders = new Set(result.map(r => r.email));
+          console.log('Leaders assigned in first pass:', assignedLeaders.size);
+          console.log('Remaining leaders with prefs:', leadersWithPrefs.length - assignedLeaders.size);
+          
+          leadersWithPrefs.forEach(leader => {
+            if (!assignedLeaders.has(leader.email)) {
+              const prefs = preferencesMap[leader.email];
+              
+              // Try to assign to their first choice if it has room
+              let assigned = false;
+              for (let prefLevel = 1; prefLevel <= 3 && !assigned; prefLevel++) {
+                const choice = prefLevel === 1 ? prefs.first : prefLevel === 2 ? prefs.second : prefs.third;
+                if (choice && committees.includes(choice) && committeeMembers[choice].length < maxSize) {
+                  committeeMembers[choice].push({
+                    email: leader.email,
+                    isLeader: true
+                  });
+                  
+                  result.push({
+                    email: leader.email,
+                    assigned: choice,
+                    preference: prefLevel,
+                    isLeader: true
+                  });
+                  
+                  assignedLeaders.add(leader.email);
+                  assigned = true;
+                }
+              }
+              
+              // If none of their top 3 had room, assign to smallest committee
+              if (!assigned) {
+                const smallestCommittee = committees.reduce((min, c) => 
+                  committeeMembers[c].length < committeeMembers[min].length ? c : min
+                );
+                
+                committeeMembers[smallestCommittee].push({
+                  email: leader.email,
+                  isLeader: true
+                });
+                
+                result.push({
+                  email: leader.email,
+                  assigned: smallestCommittee,
+                  preference: 4,
+                  isLeader: true
+                });
+                
+                assignedLeaders.add(leader.email);
+              }
+            }
+          });
+
+          // Now assign leaders who didn't fill out the form
           leadersWithoutPrefs.forEach(leader => {
             if (!assignedLeaders.has(leader.email)) {
               const smallestCommittee = committees.reduce((min, c) => 
